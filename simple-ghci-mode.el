@@ -19,29 +19,38 @@
   :type 'string
   :group 'ghci)
 
-(defvar-local sgm:stack-params nil ;; dir-local
-  "Targets used for the stack process.")
+(defvar-local sgm:program-params nil ;; dir-local
+  "Parameters to `sgm:program-name'")
 
-(defvar-local sgm:stack-on-reload-command nil ;; dir-local
+(defvar-local sgm:on-reload-command nil ;; dir-local
   "Command to run on save of a file")
 
 (defvar sgm:buffer-project-root nil)
 
-;; Make `sgm:stack-params' safe if its value is list of string values
+;; Make `sgm:program-name' safe if its value is a string
 ;; For example:
 ;; ((simple-ghci-mode
-;;   (sgm:stack-params . ("ghci" "--test" "crypto-ledger:lib" "crypto-ledger:crypto-ledger-test"))
+;;   (sgm:program-name . "cabal")
 ;; ))
-(put 'sgm:stack-params 'safe-local-variable
+(put 'sgm:program-name 'safe-local-variable
+     (lambda (command)
+       (stringp command)))
+
+;; Make `sgm:program-params' safe if its value is list of string values
+;; For example:
+;; ((simple-ghci-mode
+;;   (sgm:program-params . ("ghci" "--test" "crypto-ledger:lib" "crypto-ledger:crypto-ledger-test"))
+;; ))
+(put 'sgm:program-params 'safe-local-variable
      (lambda (project)
        (sgm:is-list-of-strings project)))
 
-;; Make `sgm:stack-on-reload-command' safe if its value is a string
+;; Make `sgm:on-reload-command' safe if its value is a string
 ;; For example:
 ;; ((simple-ghci-mode
-;;  (sgm:stack-on-reload-command . "Main.main")
+;;   (sgm:on-reload-command . "Main.main")
 ;; ))
-(put 'sgm:stack-on-reload-command 'safe-local-variable
+(put 'sgm:on-reload-command 'safe-local-variable
      (lambda (command)
        (stringp command)))
 
@@ -86,19 +95,18 @@ identified by the following rules:
 	         	   (error "Could not find project root, type `C-h f sgm:find-root` for help.")))
          (buffer-name (sgm:buffer-name)))
 
-    (when (not (or (executable-find sgm:program-name)))
-      (error "Could not find %s on PATH. Please customize the sgm:program-name variable." sgm:program-name))
-
     ;; start new ghci
     (with-current-buffer (get-buffer-create buffer-name)
       (when pop-p (pop-to-buffer-same-window (current-buffer)))
       (unless (comint-check-proc (current-buffer))
         (unless (derived-mode-p 'simple-ghci-mode) (simple-ghci-mode))
         (cd project-root)
-        (message "Starting ghci in buffer %s " buffer-name)
-        (insert (concat "Running " sgm:program-name "\n"))
         (hack-dir-local-variables-non-file-buffer)
-        (comint-exec (current-buffer) buffer-name sgm:program-name nil sgm:stack-params))
+        (when (not (or (executable-find sgm:program-name)))
+          (error "Could not find %s on PATH. Please customize the sgm:program-name variable." sgm:program-name))
+        (message "Starting ghci in buffer %s " buffer-name)
+        (insert (format "Running %s %s, in %s\n" sgm:program-name (mapconcat 'identity sgm:program-params " ") project-root))
+        (comint-exec (current-buffer) buffer-name sgm:program-name nil sgm:program-params))
       (current-buffer))))
 
 (defvar sgm:mode-map
@@ -148,7 +156,7 @@ identified by the following rules:
     (ignore-errors (compilation-forget-errors))
     (comint-clear-buffer)
     (comint-send-string (current-buffer) ":r\n")
-    (comint-send-string (current-buffer) (format "%s\n" sgm:stack-on-reload-command))))
+    (comint-send-string (current-buffer) (format "%s\n" sgm:on-reload-command))))
 
 (add-hook 'haskell-mode-hook (lambda () (add-hook 'after-save-hook 'sgm:reload-ghci)))
 
