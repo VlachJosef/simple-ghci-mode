@@ -51,7 +51,7 @@
                             (stringp item)) list))))
 
 (defun sgm:find-root ()
-  "Starting from the current default-directory, find a parent
+  "Starting from the current `default-directory', find a parent
 directory that is an ghci root. An ghci root directory is
 identified by the following rules:
 
@@ -69,7 +69,7 @@ identified by the following rules:
                (equal dir parent))
            (and best-root (abbreviate-file-name best-root)))
           ((file-exists-p (expand-file-name name-or-pred dir))
-           (sgm:find-root-impl name-or-pred parent dir))
+           (sgm:find-root-impl name-or-pred parent (if best-root best-root dir)))
           ('t
            (sgm:find-root-impl name-or-pred parent best-root)))))
 
