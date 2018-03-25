@@ -9,6 +9,9 @@
 ;;
 ;;; Code:
 
+(require 'hydra "hydra" 't)
+(require 'comint)
+
 (defcustom sgm:program-name "stack"
   "Program invoked by the `sgm:run-ghci' command."
   :type 'string
@@ -155,8 +158,8 @@ identified by the following rules:
   (when (sgm:switch-to-ghci-buffer)
     (ignore-errors (compilation-forget-errors))
     (comint-clear-buffer)
-    (comint-send-string (current-buffer) ":r\n")
-    (comint-send-string (current-buffer) (format "%s\n" sgm:on-reload-command))))
+    (sgm:repl-command ":r")
+    (sgm:repl-command sgm:on-reload-command)))
 
 (add-hook 'haskell-mode-hook (lambda () (add-hook 'after-save-hook 'sgm:reload-ghci)))
 
@@ -183,8 +186,36 @@ identified by the following rules:
 
     (if root-and-buffers (switch-to-buffer-other-window (car root-and-buffers))
       (progn
-        (message "No ghci buffer found.")
-        nil))))
+        (message "Starting new repl.")
+        (sgm:ghci-start)))))
+
+(defhydra sgm:hydra ()
+  "
+Search for _l_ load _d_ doc _h_ hoogle _s_ repl _q_ quit"
+  ("l" (sgm:load-current-file) nil)
+  ("s" (sgm:switch-to-ghci-buffer) nil)
+  ("d" (sgm:show-doc "doc") nil)
+  ("h" (sgm:show-doc "hoogle") nil)
+  ("q" nil nil :color blue))
+
+(defun sgm:load-current-file ()
+  (let ((file-to-load (buffer-name)))
+    (message "Loading %s file" file-to-load)
+    (sgm:switch-to-ghci-buffer)
+    (sgm:repl-command (format ":l %s" file-to-load))))
+
+(defun sgm:show-doc (command)
+  (let ((symbol (symbol-at-point)))
+    (sgm:switch-to-ghci-buffer)
+    (sgm:repl-command (format ":%s %s" command symbol))
+    (other-window 1)))
+
+(defun sgm:run-hydra ()
+  (interactive)
+  (sgm:hydra/body))
+
+(defun sgm:repl-command (command)
+  (comint-send-string (current-buffer) (concat command "\n")))
 
 (provide 'simple-ghci-mode)
 ;;; simple-ghci-mode.el ends here
