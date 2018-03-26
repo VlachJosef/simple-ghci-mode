@@ -199,7 +199,7 @@ Search for _l_ load _d_ doc _h_ hoogle _s_ repl _q_ quit"
   ("q" nil nil :color blue))
 
 (defun sgm:load-current-file ()
-  (let ((file-to-load (buffer-name)))
+  (let ((file-to-load buffer-file-name))
     (message "Loading %s file" file-to-load)
     (sgm:switch-to-ghci-buffer)
     (sgm:repl-command (format ":l %s" file-to-load))))
