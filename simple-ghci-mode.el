@@ -22,6 +22,8 @@
   :type 'string
   :group 'ghci)
 
+(defconst sgm:prompt-regexp "^ghci> ")
+
 (defvar-local sgm:program-params nil ;; dir-local
   "Parameters to `sgm:program-name'")
 
@@ -117,7 +119,7 @@ identified by the following rules:
     (set-keymap-parent map
                        (make-composed-keymap compilation-shell-minor-mode-map
                                              comint-mode-map))
-    ;;(define-key map (kbd "C-c C-j") 'some-command)
+    (define-key map (kbd "C-a") 'comint-bol)
     map)
   "Basic mode map for `sgm-start'")
 
@@ -126,7 +128,6 @@ identified by the following rules:
 
   \\{sgm:mode-map}"
   (use-local-map sgm:mode-map)
-  ;;(ignore-errors (scala-mode:set-scala-syntax-mode))
   (add-hook 'simple-ghci-mode-hook 'sgm:initialize-for-comint-mode)
   (add-hook 'simple-ghci-mode-hook 'sgm:initialize-for-compilation-mode))
 
@@ -138,12 +139,14 @@ identified by the following rules:
 (defun sgm:initialize-for-comint-mode ()
   (sgm:require-buffer)
   (when (derived-mode-p 'comint-mode)
-    (setq comint-process-echoes t)
-    (setq comint-scroll-to-bottom-on-output nil)
+    (setq comint-process-echoes nil)
+    (setq comint-scroll-to-bottom-on-output t)
+    (setq-local comint-prompt-regexp sgm:prompt-regexp)
     (setq-local comint-use-prompt-regexp t)
     (setq-local comint-prompt-read-only t)
     (setq-local comint-buffer-maximum-size 4096)
-    (setq-local comint-output-filter-functions '(comint-postoutput-scroll-to-bottom))))
+    ;;(setq-local comint-output-filter-functions '(comint-postoutput-scroll-to-bottom))
+    ))
 
 (defun sgm:initialize-for-compilation-mode ()
   (setq-local
@@ -159,7 +162,8 @@ identified by the following rules:
     (ignore-errors (compilation-forget-errors))
     (comint-clear-buffer)
     (sgm:repl-command ":r")
-    (sgm:repl-command sgm:on-reload-command)))
+    (when sgm:on-reload-command
+      (sgm:repl-command sgm:on-reload-command))))
 
 (add-hook 'haskell-mode-hook (lambda () (add-hook 'after-save-hook 'sgm:reload-ghci)))
 
