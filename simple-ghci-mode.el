@@ -93,26 +93,19 @@ identified by the following rules:
           sgm:buffer-name-base
           (abbreviate-file-name (sgm:find-root))))
 
-(defun sgm:ghci-start () "Start ghci" (interactive) (sgm:run-ghci t))
+(defun sgm:run-ghci (callback)
+  (let ((project-root (or (sgm:find-root)
+                          (error "Could not find project root, type `C-h f sgm:find-root` for help.")))
+        (buffer-name (sgm:buffer-name)))
 
-(defun sgm:run-ghci (&optional pop-p)
-  (let* ((project-root (or (sgm:find-root)
-	         	   (error "Could not find project root, type `C-h f sgm:find-root` for help.")))
-         (buffer-name (sgm:buffer-name)))
-
-    ;; start new ghci
     (with-current-buffer (get-buffer-create buffer-name)
-      (when pop-p (pop-to-buffer-same-window (current-buffer)))
-      (unless (comint-check-proc (current-buffer))
-        (unless (derived-mode-p 'simple-ghci-mode) (simple-ghci-mode))
-        (cd project-root)
-        (hack-dir-local-variables-non-file-buffer)
-        (when (not (or (executable-find sgm:program-name)))
-          (error "Could not find %s on PATH. Please customize the sgm:program-name variable." sgm:program-name))
-        (message "Starting ghci in buffer %s " buffer-name)
-        (insert (format "Running %s %s, in %s\n" sgm:program-name (mapconcat 'identity sgm:program-params " ") project-root))
-        (comint-exec (current-buffer) buffer-name sgm:program-name nil sgm:program-params))
-      (current-buffer))))
+      (pop-to-buffer-same-window (current-buffer))
+      (unless (derived-mode-p 'simple-ghci-mode) (simple-ghci-mode))
+      (cd project-root)
+      (hack-dir-local-variables-non-file-buffer)
+      (when (not (or (executable-find sgm:program-name)))
+        (error "Could not find %s on PATH. Please customize the sgm:program-name variable." sgm:program-name))
+      (funcall callback sgm:program-name sgm:program-params buffer-name project-root))))
 
 (defvar sgm:mode-map
   (let ((map (make-sparse-keymap)))
@@ -120,6 +113,7 @@ identified by the following rules:
                        (make-composed-keymap compilation-shell-minor-mode-map
                                              comint-mode-map))
     (define-key map (kbd "C-a") 'comint-bol)
+    (define-key map (kbd "C-c v") 'sgm:run-hydra)
     map)
   "Basic mode map for `sgm-start'")
 
@@ -173,6 +167,23 @@ identified by the following rules:
 
 (defun sgm:switch-to-ghci-buffer ()
   (interactive)
+
+  (sgm:switch-to-ghci-buffer-callbacks nil (lambda (program-name program-params buffer-name project-root)
+                      (sgm:insert-text-to-buffer program-name program-params project-root)
+                      (comint-exec (current-buffer) buffer-name program-name nil program-params))))
+
+(defun sgm:switch-to-ghci-buffer-callbacks (on-process-running on-no-process)
+  (let ((ghci-buffer-process (sgm:get-ghci-buffer)))
+
+    (if ghci-buffer-process
+        (let ((cb (current-buffer)))
+          (unless (equal cb ghci-buffer-process)
+            (switch-to-buffer-other-window ghci-buffer-process))
+          (when (functionp on-process-running) (funcall on-process-running)))
+      (sgm:run-ghci (lambda (program-name program-params buffer-name project-root)
+                      (funcall on-no-process program-name program-params buffer-name project-root))))))
+
+(defun sgm:get-ghci-buffer ()
   (let ((root-and-buffers
          (cl-loop for process being the elements of (process-list)
                   for current-process-buffer = (process-buffer process)
@@ -187,19 +198,16 @@ identified by the following rules:
                   collect (with-current-buffer current-process-buffer
                             current-process-buffer) into file-buffers
                             finally return file-buffers)))
-
-    (if root-and-buffers (switch-to-buffer-other-window (car root-and-buffers))
-      (progn
-        (message "Starting new repl.")
-        (sgm:ghci-start)))))
+    (car root-and-buffers)))
 
 (defhydra sgm:hydra ()
   "
-Search for _l_ load _d_ doc _h_ hoogle _s_ repl _q_ quit"
+Search for _l_ load _d_ doc _h_ hoogle _s_ repl _p_ pedantic _q_ quit"
   ("l" (sgm:load-current-file) nil)
   ("s" (sgm:switch-to-ghci-buffer) nil)
   ("d" (sgm:show-doc "doc") nil)
   ("h" (sgm:show-doc "hoogle") nil)
+  ("p" (sgm:stack-compile-pedantic) nil)
   ("q" nil nil :color blue))
 
 (defun sgm:load-current-file ()
@@ -214,9 +222,40 @@ Search for _l_ load _d_ doc _h_ hoogle _s_ repl _q_ quit"
     (sgm:repl-command (format ":%s %s" command symbol))
     (other-window 1)))
 
+(defun sgm:callback-factory (callback)
+  `(lambda (process event)
+     (when (memq (process-status process) '(signal exit))
+       (funcall (quote ,callback)))))
+
+(defun sgm:stack-compile-pedantic ()
+  (sgm:switch-to-ghci-buffer-callbacks 'sgm:stack-quit 'sgm:stack-clean))
+
+(defun sgm:stack-quit ()
+  (let ((process (get-process (sgm:buffer-name))))
+    (set-process-sentinel process (sgm:callback-factory 'sgm:stack-clean))
+    (sgm:repl-command ":q")))
+
+(defun sgm:stack-clean (&optional program-name program-params buffer-name project-root)
+  (sgm:stack-command "stack" '("clean") 'sgm:pedantic-compile))
+
+(defun sgm:pedantic-compile ()
+  (sgm:stack-command "stack" '("build" "--pedantic") (lambda () (message "Compilation done."))))
+
+(defun sgm:stack-command (command command-params on-finish)
+  (let ((buffer-name (sgm:buffer-name)))
+
+    (sgm:insert-text-to-buffer command command-params default-directory)
+
+    (let ((buf-name (comint-exec buffer-name buffer-name command nil command-params)))
+      (set-process-sentinel (get-process buf-name) (sgm:callback-factory on-finish)))))
+
 (defun sgm:run-hydra ()
   (interactive)
   (sgm:hydra/body))
+
+(defun sgm:insert-text-to-buffer (command command-params dir-name)
+  (let ((inhibit-read-only t))
+    (insert (format "Running %s %s, in %s\n" command (mapconcat 'identity command-params " ") dir-name))))
 
 (defun sgm:repl-command (command)
   (comint-send-string (current-buffer) (concat command "\n")))
