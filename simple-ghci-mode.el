@@ -248,13 +248,20 @@ to run in `after-save-hook'."
 
 (defhydra sgm:hydra ()
   "
-Search for _l_ load _d_ doc _h_ hoogle _s_ repl _p_ pedantic _q_ quit"
+Search for _l_ load _d_ doc _h_ hoogle _s_ repl _D_ DataKinds _p_ pedantic _q_ quit"
   ("l" (sgm:load-current-file) nil)
   ("s" (sgm:switch-to-ghci-buffer) nil)
   ("d" (sgm:show-doc "doc") nil)
   ("h" (sgm:show-doc "hoogle") nil)
+  ("D" (sgm:activate-extension "DataKinds") nil)
   ("p" (sgm:stack-compile-pedantic) nil)
   ("q" nil nil :color blue))
+
+(defun sgm:activate-extension (ext)
+  (let ((repl-cmd (format ":set -X%s" ext)))
+    (sgm:switch-to-ghci-buffer)
+    (message "Running %s" repl-cmd)
+    (sgm:repl-command repl-cmd)))
 
 (defun sgm:load-current-file ()
   (let ((file-to-load buffer-file-name))
