@@ -193,11 +193,8 @@ to run in `after-save-hook'."
 (defun sgm:get-mode-buffer ()
   (let ((mode-buffers (sgm:mode-buffers))
         (root (sgm:find-root)))
-    (if (equal 1 (length mode-buffers))
-        (car mode-buffers)
-      (when root
-        (seq-find (lambda (buffer)
-                    (string-match root (buffer-name buffer))) mode-buffers)))))
+    (when root
+      (seq-find (lambda (buffer) (string-match root (buffer-name buffer))) mode-buffers))))
 
 (add-hook 'haskell-mode-hook (lambda () (add-hook 'before-save-hook 'sgm:check-modified-buffers)))
 
@@ -213,32 +210,14 @@ to run in `after-save-hook'."
                       (comint-exec (current-buffer) buffer-name program-name nil program-params))))
 
 (defun sgm:switch-to-ghci-buffer-callbacks (on-process-running on-no-process)
-  (let ((ghci-buffer-process (sgm:get-ghci-buffer)))
-
-    (if ghci-buffer-process
+  (let ((ghci-buffer (sgm:get-mode-buffer)))
+    (if (get-buffer-process ghci-buffer)
         (let ((cb (current-buffer)))
-          (unless (equal cb ghci-buffer-process)
-            (switch-to-buffer-other-window ghci-buffer-process))
+          (unless (equal cb ghci-buffer)
+            (switch-to-buffer-other-window ghci-buffer))
           (when (functionp on-process-running) (funcall on-process-running)))
       (sgm:run-ghci (lambda (program-name program-params buffer-name project-root)
                       (funcall on-no-process program-name program-params buffer-name project-root))))))
-
-(defun sgm:get-ghci-buffer ()
-  (let ((root-and-buffers
-         (cl-loop for process being the elements of (process-list)
-                  for current-process-buffer = (process-buffer process)
-                  when (and
-                        (equal (process-status process) 'run) ;; proces must be running
-                        (bufferp current-process-buffer) ;; process must have associated buffer
-                        (buffer-live-p current-process-buffer) ;; buffer must not be killed
-                        (with-current-buffer current-process-buffer
-                          (and
-                           (sgm:mode-p)
-                           (process-live-p process))))
-                  collect (with-current-buffer current-process-buffer
-                            current-process-buffer) into file-buffers
-                            finally return file-buffers)))
-    (car root-and-buffers)))
 
 (defun sgm:mode-buffers ()
   (cl-loop for buffer being the elements of (buffer-list)
