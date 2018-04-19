@@ -135,6 +135,12 @@ identified by the following rules:
   (unless (derived-mode-p 'simple-ghci-mode)
     (error "Current buffer %s is not an simple-ghci-mode buffer" (current-buffer))))
 
+(defun sgm:minibuffer-compilation-status (input-string)
+  (when (string-match "^Ok, [[:digit:]]* modules? loaded.$" input-string)
+    (message "Compilation OK."))
+  (when (string-match "^Failed, [[:digit:]]* modules? loaded.$" input-string)
+    (message "Compilation Failed.")))
+
 (defun sgm:initialize-for-comint-mode ()
   (sgm:require-buffer)
   (when (derived-mode-p 'comint-mode)
@@ -144,8 +150,7 @@ identified by the following rules:
     (setq-local comint-use-prompt-regexp t)
     (setq-local comint-prompt-read-only t)
     (setq-local comint-buffer-maximum-size 4096)
-    ;;(setq-local comint-output-filter-functions '(comint-postoutput-scroll-to-bottom))
-    ))
+    (setq-local comint-output-filter-functions '(sgm:minibuffer-compilation-status))))
 
 (defun sgm:initialize-for-compilation-mode ()
   (setq-local
