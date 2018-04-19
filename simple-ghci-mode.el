@@ -22,6 +22,11 @@
   :type 'string
   :group 'ghci)
 
+(defcustom sgm:allowed-files-regexp '(".*.hs$")
+  "Regexp to match files when save should run ghci reload"
+  :type '(repeat string)
+  :group 'ghci)
+
 (defconst sgm:prompt-regexp "^ghci> ")
 
 (defvar-local sgm:program-params nil ;; dir-local
@@ -151,15 +156,50 @@ identified by the following rules:
   (setq-local compilation-mode-font-lock-keywords nil)
   (compilation-setup t))
 
-(defun sgm:reload-ghci ()
-  (when (sgm:switch-to-ghci-buffer)
-    (ignore-errors (compilation-forget-errors))
-    (comint-clear-buffer)
-    (sgm:repl-command ":r")
-    (when sgm:on-reload-command
-      (sgm:repl-command sgm:on-reload-command))))
+(defun sgm:check-modified-buffers ()
+  "Check modified buffers matching `sgm:allowed-files-regexp' regexps
+If there is only one modified buffer then add `sgm:reload-ghci'
+to run in `after-save-hook'."
+  (let (buffers-to-save)
+    (dolist (buffer (buffer-list))
+      (with-current-buffer buffer
+        (cl-loop for allowed-file-regexp being the elements of sgm:allowed-files-regexp
+                 if (and (buffer-file-name) ;;  If `buffer' is not visiting any file, `buffer-file-name' returns nil
+                         (string-match allowed-file-regexp (buffer-file-name))
+                         (buffer-modified-p))
+                 do (push (buffer-name) buffers-to-save))))
+    (when (eq 1 (length buffers-to-save))
+      (add-hook 'after-save-hook 'sgm:reload-ghci))))
 
-(add-hook 'haskell-mode-hook (lambda () (add-hook 'after-save-hook 'sgm:reload-ghci)))
+(defun sgm:reload-ghci ()
+  (remove-hook 'after-save-hook 'sgm:reload-ghci)
+  (let ((mode-buffer (sgm:get-mode-buffer)))
+    (when mode-buffer
+      (let ((process (get-buffer-process mode-buffer)))
+        (when process
+          (let* ((command (process-command process))
+                 (is-stack (nth 0 command))
+                 (is-ghci (nth 1 command)))
+            (when (and
+                   (equal is-stack "stack")
+                   (equal is-ghci "ghci"))
+              (with-current-buffer mode-buffer
+                (ignore-errors (compilation-forget-errors))
+                (comint-clear-buffer)
+                (sgm:repl-command ":r")
+                (when sgm:on-reload-command
+                  (sgm:repl-command sgm:on-reload-command))))))))))
+
+(defun sgm:get-mode-buffer ()
+  (let ((mode-buffers (sgm:mode-buffers))
+        (root (sgm:find-root)))
+    (if (equal 1 (length mode-buffers))
+        (car mode-buffers)
+      (when root
+        (seq-find (lambda (buffer)
+                    (string-match root (buffer-name buffer))) mode-buffers)))))
+
+(add-hook 'haskell-mode-hook (lambda () (add-hook 'before-save-hook 'sgm:check-modified-buffers)))
 
 (defun sgm:mode-p ()
   "Return non-nil if the current buffer is sgm mode buffer"
@@ -199,6 +239,12 @@ identified by the following rules:
                             current-process-buffer) into file-buffers
                             finally return file-buffers)))
     (car root-and-buffers)))
+
+(defun sgm:mode-buffers ()
+  (cl-loop for buffer being the elements of (buffer-list)
+           when (with-current-buffer buffer (sgm:mode-p))
+           collect buffer into sgm-mode-buffers
+           finally return sgm-mode-buffers))
 
 (defhydra sgm:hydra ()
   "
