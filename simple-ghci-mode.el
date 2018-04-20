@@ -136,10 +136,17 @@ identified by the following rules:
     (error "Current buffer %s is not an simple-ghci-mode buffer" (current-buffer))))
 
 (defun sgm:minibuffer-compilation-status (input-string)
-  (when (string-match "^Ok, [[:digit:]]* modules? loaded.$" input-string)
-    (message "Compilation OK."))
-  (when (string-match "^Failed, [[:digit:]]* modules? loaded.$" input-string)
-    (message "Compilation Failed.")))
+  (let* ((beg (save-excursion
+                (goto-char comint-last-output-start)
+                (move-beginning-of-line nil)
+                (point)))
+         (line-beginning (buffer-substring-no-properties beg comint-last-output-start))
+         (input-string-complete (if (string-match sgm:prompt-regexp line-beginning)
+                                    input-string ;; Do not concat prompt
+                                  (concat line-beginning input-string))))
+
+    (when (string-match "^\\([[:alpha:]]*\\), \\(no\\|one\\|two\\|three\\|four\\|five\\|six\\|[[:digit:]]*\\) modules? loaded.$" input-string-complete)
+     (message "Compilation %s." (match-string-no-properties 1 input-string-complete)))))
 
 (defun sgm:initialize-for-comint-mode ()
   (sgm:require-buffer)
