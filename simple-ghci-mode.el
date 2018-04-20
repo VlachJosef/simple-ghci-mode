@@ -112,6 +112,14 @@ identified by the following rules:
         (error "Could not find %s on PATH. Please customize the sgm:program-name variable." sgm:program-name))
       (funcall callback sgm:program-name sgm:program-params buffer-name project-root))))
 
+(defun sgm:next-error ()
+  (interactive)
+
+  (let* ((mode-buffer (sgm:get-mode-buffer))
+         (compilation-context-lines 4)
+         (next-error-last-buffer mode-buffer))
+    (when mode-buffer (next-error))))
+
 (defvar sgm:mode-map
   (let ((map (make-sparse-keymap)))
     (set-keymap-parent map
@@ -206,7 +214,20 @@ to run in `after-save-hook'."
   (let ((mode-buffers (sgm:mode-buffers))
         (root (sgm:find-root)))
     (when root
-      (seq-find (lambda (buffer) (string-match root (buffer-name buffer))) mode-buffers))))
+      (let ((ghci-for-root (seq-find (lambda (buffer) (string-match root (buffer-name buffer))) mode-buffers)))
+        (if ghci-for-root
+            ghci-for-root
+          (if (eq (length mode-buffers) 1)
+              (car mode-buffers)
+            (get-buffer (sgm:choose-buffer (mapcar 'buffer-name mode-buffers)))))))))
+
+(defun sgm:choose-buffer (buffers)
+  (cond ((fboundp 'ivy-read)
+         (ivy-read "GHCi buffer: " buffers))
+        ((fboundp 'ido-completing-read)
+         (ido-completing-read "GHCi buffer: " buffers))
+        (t
+         (completing-read "GHCi buffer: (hit TAB to auto-complete): " buffers nil t))))
 
 (add-hook 'haskell-mode-hook (lambda () (add-hook 'before-save-hook 'sgm:check-modified-buffers)))
 
