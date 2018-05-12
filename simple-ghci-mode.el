@@ -154,7 +154,7 @@ identified by the following rules:
                                   (concat line-beginning input-string))))
 
     (when (string-match "^\\([[:alpha:]]*\\), \\(no\\|one\\|two\\|three\\|four\\|five\\|six\\|[[:digit:]]*\\) modules? loaded.$" input-string-complete)
-     (message "Compilation %s." (match-string-no-properties 1 input-string-complete)))))
+      (message "Compilation %s." (match-string-no-properties 1 input-string-complete)))))
 
 (defun sgm:initialize-for-comint-mode ()
   (sgm:require-buffer)
@@ -167,14 +167,17 @@ identified by the following rules:
     (setq-local comint-buffer-maximum-size 4096)
     (setq-local comint-output-filter-functions '(sgm:minibuffer-compilation-status))))
 
-(defface face-unimportant
+(defface sgm:face-unimportant
   '((t :foreground "gray58")) "highlight less important text")
 
-(defface thin-arrow
+(defface sgm:face-thin-arrow
   '((t :foreground "dark salmon")) "highlight ->")
 
-(defface thick-arrow
+(defface sgm:face-thick-arrow
   '((t :foreground "plum2")) "highlight =>")
+
+(defface sgm:face-run-command
+  '((t :foreground "cyan2")) "Executed `sgm:program-name' command")
 
 (defun sgm:initialize-for-compilation-mode ()
   (setq-local
@@ -183,13 +186,15 @@ identified by the following rules:
      ("^  \\(.*.hs\\):\\([[:digit:]]+\\): " 1 2 3 2 1) ;; Hspec failures
      ("^\\(.*.hs\\):\\([[:digit:]]+\\):\\([[:digit:]]+\\): warning:" 1 2 3 1 1)))
   (setq-local compilation-mode-font-lock-keywords
-              '(("-- Defined in ‘.*’" 0 'face-unimportant prepend)
-                ("(bound at /.*:[[:digit:]]+:[[:digit:]]+)$" 0 'face-unimportant prepend)
-                ("\\[ *[[:digit:]]+ of [[:digit:]]+] Compiling" 0 'face-unimportant prepend)
-                ("( /.*, interpreted )$" 0 'face-unimportant prepend)
-                (" -> " 0 'thin-arrow prepend)
-                (" :: " 0 'thick-arrow prepend)
-                (" => " 0 'thick-arrow prepend)))
+              '(("-- Defined in ‘.*’" 0 'sgm:face-unimportant prepend)
+                ("(bound at /.*:[[:digit:]]+:[[:digit:]]+)$" 0 'sgm:face-unimportant prepend)
+                ("\\[ *[[:digit:]]+ of [[:digit:]]+] Compiling" 0 'sgm:face-unimportant prepend)
+                ("( /.*, interpreted )$" 0 'sgm:face-unimportant prepend)
+                ("( .*o )$" 0 'sgm:face-unimportant prepend)
+                ("Running \\(.*\\)$" 0 'sgm:face-run-command prepend)
+                (" -> " 0 'sgm:face-thin-arrow prepend)
+                (" :: " 0 'sgm:face-thick-arrow prepend)
+                (" => " 0 'sgm:face-thick-arrow prepend)))
   (compilation-setup t))
 
 (defun sgm:check-modified-buffers ()
@@ -230,20 +235,7 @@ to run in `after-save-hook'."
   (let ((mode-buffers (sgm:mode-buffers))
         (root (sgm:find-root)))
     (when root
-      (let ((ghci-for-root (seq-find (lambda (buffer) (string-match root (buffer-name buffer))) mode-buffers)))
-        (if ghci-for-root
-            ghci-for-root
-          (if (eq (length mode-buffers) 1)
-              (car mode-buffers)
-            (get-buffer (sgm:choose-buffer (mapcar 'buffer-name mode-buffers)))))))))
-
-(defun sgm:choose-buffer (buffers)
-  (cond ((fboundp 'ivy-read)
-         (ivy-read "GHCi buffer: " buffers))
-        ((fboundp 'ido-completing-read)
-         (ido-completing-read "GHCi buffer: " buffers))
-        (t
-         (completing-read "GHCi buffer: (hit TAB to auto-complete): " buffers nil t))))
+      (seq-find (lambda (buffer) (string-match root (buffer-name buffer))) mode-buffers))))
 
 (add-hook 'haskell-mode-hook (lambda () (add-hook 'before-save-hook 'sgm:check-modified-buffers)))
 
@@ -254,17 +246,19 @@ to run in `after-save-hook'."
 (defun sgm:switch-to-ghci-buffer ()
   (interactive)
 
-  (sgm:switch-to-ghci-buffer-callbacks nil (lambda (program-name program-params buffer-name project-root)
-                      (sgm:insert-text-to-buffer program-name program-params project-root)
-                      (comint-exec (current-buffer) buffer-name program-name nil program-params))))
+  (sgm:switch-to-ghci-buffer-callbacks (lambda (program-name program-params buffer-name project-root)
+                                         (sgm:insert-text-to-buffer program-name program-params project-root)
+                                         (comint-exec (current-buffer) buffer-name program-name nil program-params))))
 
-(defun sgm:switch-to-ghci-buffer-callbacks (on-process-running on-no-process)
-  (let ((ghci-buffer (sgm:get-mode-buffer)))
+(defun sgm:switch-to-ghci-buffer-callbacks (on-no-process &optional always-execute)
+  (let ((ghci-buffer (sgm:get-mode-buffer))
+        (on-process-running (lambda ()
+                              (sgm:stack-quit on-no-process))))
     (if (get-buffer-process ghci-buffer)
         (let ((cb (current-buffer)))
           (unless (equal cb ghci-buffer)
             (switch-to-buffer-other-window ghci-buffer))
-          (when (functionp on-process-running) (funcall on-process-running)))
+          (when always-execute (funcall on-process-running)))
       (sgm:run-ghci (lambda (program-name program-params buffer-name project-root)
                       (funcall on-no-process program-name program-params buffer-name project-root))))))
 
@@ -276,17 +270,26 @@ to run in `after-save-hook'."
 
 (defhydra sgm:hydra ()
   "
-Search for _l_ load _d_ doc _h_ hoogle _s_ repl _D_ DataKinds _p_ pedantic _q_ quit"
+Search for _l_ load _d_ doc _h_ hoogle _s_ repl _D_ DataKinds _n_ no-type-defaults _C_ clean _c_ compile _p_ pedantic _q_ quit"
   ("l" (sgm:load-current-file) nil)
   ("s" (sgm:switch-to-ghci-buffer) nil)
   ("d" (sgm:show-doc "doc") nil)
   ("h" (sgm:show-doc "hoogle") nil)
   ("D" (sgm:activate-extension "DataKinds") nil)
+  ("n" (sgm:activate-warning "no-type-defaults") nil)
+  ("C" (sgm:stack-clean) nil)
+  ("c" (sgm:stack-compile) nil)
   ("p" (sgm:stack-compile-pedantic) nil)
   ("q" nil nil :color blue))
 
 (defun sgm:activate-extension (ext)
   (let ((repl-cmd (format ":set -X%s" ext)))
+    (sgm:switch-to-ghci-buffer)
+    (message "Running %s" repl-cmd)
+    (sgm:repl-command repl-cmd)))
+
+(defun sgm:activate-warning (ext)
+  (let ((repl-cmd (format ":set -W%s" ext)))
     (sgm:switch-to-ghci-buffer)
     (message "Running %s" repl-cmd)
     (sgm:repl-command repl-cmd)))
@@ -309,19 +312,23 @@ Search for _l_ load _d_ doc _h_ hoogle _s_ repl _D_ DataKinds _p_ pedantic _q_ q
      (when (memq (process-status process) '(signal exit))
        (funcall (quote ,callback)))))
 
-(defun sgm:stack-compile-pedantic ()
-  (sgm:switch-to-ghci-buffer-callbacks 'sgm:stack-quit 'sgm:stack-clean))
+(defun sgm:stack-clean ()
+  (sgm:switch-to-ghci-buffer-callbacks (sgm:compile-cmd '("clean")) t))
 
-(defun sgm:stack-quit ()
+(defun sgm:stack-compile ()
+  (sgm:switch-to-ghci-buffer-callbacks (sgm:compile-cmd '("build")) t))
+
+(defun sgm:stack-compile-pedantic ()
+  (sgm:switch-to-ghci-buffer-callbacks (sgm:compile-cmd '("build" "--pedantic")) t))
+
+(defun sgm:stack-quit (callback)
   (let ((process (get-process (sgm:buffer-name))))
-    (set-process-sentinel process (sgm:callback-factory 'sgm:stack-clean))
+    (set-process-sentinel process (sgm:callback-factory callback))
     (sgm:repl-command ":q")))
 
-(defun sgm:stack-clean (&optional program-name program-params buffer-name project-root)
-  (sgm:stack-command "stack" '("clean") 'sgm:pedantic-compile))
-
-(defun sgm:pedantic-compile ()
-  (sgm:stack-command "stack" '("build" "--pedantic") (lambda () (message "Compilation done."))))
+(defun sgm:compile-cmd (params)
+  `(lambda (&optional program-name program-params buffer-name project-root)
+     (sgm:stack-command "stack" (append (quote ,params) sgm:extra-program-params) (lambda () (message "Compilation done.")))))
 
 (defun sgm:stack-command (command command-params on-finish)
   (let ((buffer-name (sgm:buffer-name)))
