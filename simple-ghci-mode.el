@@ -35,34 +35,33 @@
 (defvar-local sgm:on-reload-command nil ;; dir-local
   "Command to run on save of a file")
 
+(defvar-local sgm:compilation-environment nil
+  "List of environment variables for compilation to inherit") ;; dir-local
+
+(defvar-local sgm:extra-program-params nil
+  "List of extras") ;; dir-local
+
 (defvar sgm:buffer-project-root nil)
 
-;; Make `sgm:program-name' safe if its value is a string
+;; Make `sgm:program-name' and `sgm:on-reload-command' safe if their values is a string
 ;; For example:
 ;; ((simple-ghci-mode
 ;;   (sgm:program-name . "cabal")
+;;   (sgm:on-reload-command . "Main.main")
 ;; ))
-(put 'sgm:program-name 'safe-local-variable
-     (lambda (command)
-       (stringp command)))
+(put 'sgm:program-name      'safe-local-variable 'stringp)
+(put 'sgm:on-reload-command 'safe-local-variable 'stringp)
 
-;; Make `sgm:program-params' safe if its value is list of string values
+;; Make `sgm:program-params', `sgm:compilation-environment' and `sgm:extra-program-params' safe if their values is list of strings
 ;; For example:
 ;; ((simple-ghci-mode
 ;;   (sgm:program-params . ("ghci" "--test" "crypto-ledger:lib" "crypto-ledger:crypto-ledger-test"))
+;;   (sgm:compilation-environment . '("CFLAGS=-I/usr/local/opt/readline/include" "LDFLAGS=-L/usr/local/opt/readline/lib"))
+;;   (sgm:extra-program-params . '("--extra-include-dirs=/usr/local/opt/readline/include" "--extra-lib-dirs=/usr/local/opt/readline/lib"))
 ;; ))
-(put 'sgm:program-params 'safe-local-variable
-     (lambda (project)
-       (sgm:is-list-of-strings project)))
-
-;; Make `sgm:on-reload-command' safe if its value is a string
-;; For example:
-;; ((simple-ghci-mode
-;;   (sgm:on-reload-command . "Main.main")
-;; ))
-(put 'sgm:on-reload-command 'safe-local-variable
-     (lambda (command)
-       (stringp command)))
+(put 'sgm:program-params          'safe-local-variable 'sgm:is-list-of-strings)
+(put 'sgm:extra-program-params    'safe-local-variable 'sgm:is-list-of-strings)
+(put 'sgm:compilation-environment 'safe-local-variable 'sgm:is-list-of-strings)
 
 (defun sgm:is-list-of-strings (list)
   "Check if `list' is list containing only strings"
@@ -110,7 +109,8 @@ identified by the following rules:
       (hack-dir-local-variables-non-file-buffer)
       (when (not (or (executable-find sgm:program-name)))
         (error "Could not find %s on PATH. Please customize the sgm:program-name variable." sgm:program-name))
-      (funcall callback sgm:program-name sgm:program-params buffer-name project-root))))
+      (setq-local compilation-environment sgm:compilation-environment)
+      (funcall callback sgm:program-name (append sgm:program-params sgm:extra-program-params) buffer-name project-root))))
 
 (defun sgm:next-error ()
   (interactive)
@@ -167,13 +167,29 @@ identified by the following rules:
     (setq-local comint-buffer-maximum-size 4096)
     (setq-local comint-output-filter-functions '(sgm:minibuffer-compilation-status))))
 
+(defface face-unimportant
+  '((t :foreground "gray58")) "highlight less important text")
+
+(defface thin-arrow
+  '((t :foreground "dark salmon")) "highlight ->")
+
+(defface thick-arrow
+  '((t :foreground "plum2")) "highlight =>")
+
 (defun sgm:initialize-for-compilation-mode ()
   (setq-local
    compilation-error-regexp-alist
    '(("^\\(.*.hs\\):\\([[:digit:]]+\\):\\([[:digit:]]+\\): error:" 1 2 3 2 1)
      ("^  \\(.*.hs\\):\\([[:digit:]]+\\): " 1 2 3 2 1) ;; Hspec failures
      ("^\\(.*.hs\\):\\([[:digit:]]+\\):\\([[:digit:]]+\\): warning:" 1 2 3 1 1)))
-  (setq-local compilation-mode-font-lock-keywords nil)
+  (setq-local compilation-mode-font-lock-keywords
+              '(("-- Defined in ‘.*’" 0 'face-unimportant prepend)
+                ("(bound at /.*:[[:digit:]]+:[[:digit:]]+)$" 0 'face-unimportant prepend)
+                ("\\[ *[[:digit:]]+ of [[:digit:]]+] Compiling" 0 'face-unimportant prepend)
+                ("( /.*, interpreted )$" 0 'face-unimportant prepend)
+                (" -> " 0 'thin-arrow prepend)
+                (" :: " 0 'thick-arrow prepend)
+                (" => " 0 'thick-arrow prepend)))
   (compilation-setup t))
 
 (defun sgm:check-modified-buffers ()
@@ -284,6 +300,7 @@ Search for _l_ load _d_ doc _h_ hoogle _s_ repl _D_ DataKinds _p_ pedantic _q_ q
 (defun sgm:show-doc (command)
   (let ((symbol (symbol-at-point)))
     (sgm:switch-to-ghci-buffer)
+    (end-of-buffer)
     (sgm:repl-command (format ":%s %s" command symbol))
     (other-window 1)))
 
