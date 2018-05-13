@@ -65,8 +65,7 @@
 
 (defun sgm:is-list-of-strings (list)
   "Check if `list' is list containing only strings"
-  (null (memq nil (mapcar (lambda (item)
-                            (stringp item)) list))))
+  (null (memq nil (mapcar 'stringp list))))
 
 (defun sgm:find-root ()
   "Starting from the current `default-directory', find a parent
@@ -304,6 +303,7 @@ Search for _l_ load _d_ doc _h_ hoogle _s_ repl _D_ DataKinds _n_ no-type-defaul
   (let ((symbol (symbol-at-point)))
     (sgm:switch-to-ghci-buffer)
     (end-of-buffer)
+    (move-end-of-line 1) ;; end-of-buffer is not enough to keep point at end of buffer with new output
     (sgm:repl-command (format ":%s %s" command symbol))
     (other-window 1)))
 
