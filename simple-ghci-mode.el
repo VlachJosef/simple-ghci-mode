@@ -227,8 +227,9 @@ to run in `after-save-hook'."
                 (ignore-errors (compilation-forget-errors))
                 (comint-clear-buffer)
                 (sgm:repl-command ":r")
-                (when sgm:on-reload-command
-                  (sgm:repl-command sgm:on-reload-command))))))))))
+                  (when (and sgm:on-reload-command
+                             (not (equal sgm:on-reload-command "")))
+                    (sgm:repl-command sgm:on-reload-command))))))))))
 
 (defun sgm:get-mode-buffer ()
   (let ((mode-buffers (sgm:mode-buffers))
