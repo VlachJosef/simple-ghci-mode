@@ -269,7 +269,7 @@ to run in `after-save-hook'."
 
 (defhydra sgm:hydra ()
   "
-Search for _l_ load _d_ doc _h_ hoogle _s_ repl _D_ DataKinds _n_ no-type-defaults _C_ clean _c_ compile _p_ pedantic _q_ quit"
+Search for _l_ load _t_ type _i_ info _d_ doc _h_ hoogle _s_ repl _D_ DataKinds _n_ no-type-defaults _C_ clean _c_ compile _p_ pedantic _q_ quit"
   ("l" (sgm:load-current-file) nil)
   ("s" (sgm:switch-to-ghci-buffer) nil)
   ("d" (sgm:show-doc "doc") nil)
@@ -279,19 +279,26 @@ Search for _l_ load _d_ doc _h_ hoogle _s_ repl _D_ DataKinds _n_ no-type-defaul
   ("C" (sgm:stack-clean) nil)
   ("c" (sgm:stack-compile) nil)
   ("p" (sgm:stack-compile-pedantic) nil)
+  ("t" (sgm:type-for-thing-at-point) nil)
+  ("i" (sgm:info-for-thing-at-point) nil)
   ("q" nil nil :color blue))
 
+(defun sgm:type-for-thing-at-point ()
+  (sgm:run-repl-command (format ":type %s" (thing-at-point 'symbol))))
+
+(defun sgm:info-for-thing-at-point ()
+  (sgm:run-repl-command (format ":info %s" (thing-at-point 'symbol))))
+
 (defun sgm:activate-extension (ext)
-  (let ((repl-cmd (format ":set -X%s" ext)))
-    (sgm:switch-to-ghci-buffer)
-    (message "Running %s" repl-cmd)
-    (sgm:repl-command repl-cmd)))
+  (sgm:run-repl-command (format ":set -X%s" ext)))
 
 (defun sgm:activate-warning (ext)
-  (let ((repl-cmd (format ":set -W%s" ext)))
-    (sgm:switch-to-ghci-buffer)
-    (message "Running %s" repl-cmd)
-    (sgm:repl-command repl-cmd)))
+  (sgm:run-repl-command (format ":set -W%s" ext)))
+
+(defun sgm:run-repl-command (repl-cmd)
+  (sgm:switch-to-ghci-buffer)
+  (message "Running %s" repl-cmd)
+  (sgm:repl-command repl-cmd))
 
 (defun sgm:load-current-file ()
   (let ((file-to-load buffer-file-name))
