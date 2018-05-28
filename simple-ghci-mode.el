@@ -155,6 +155,33 @@ identified by the following rules:
     (when (string-match "^\\([[:alpha:]]*\\), \\(no\\|one\\|two\\|three\\|four\\|five\\|six\\|[[:digit:]]*\\) modules? loaded.$" input-string-complete)
       (message "Compilation %s." (match-string-no-properties 1 input-string-complete)))))
 
+(defmacro sgm:on-hoogle-command (body)
+  `(unless (ring-empty-p comint-input-ring)
+    (let ((head (ring-ref comint-input-ring 0)))
+      (when (string-match ":hoogle" head)
+        ,body))))
+
+(defun sgm:pretify-hoogle-align (input-string)
+  (sgm:on-hoogle-command
+   (when (string-match sgm:prompt-regexp input-string)
+     (save-excursion
+       (let ((indent-tabs-mode nil)
+             (end (point-marker))
+             (start (progn
+                      (comint-previous-prompt 1)
+                      (point))))
+         (align-regexp start end "\\(\\s-*\\)\\(::\\)")
+         (align-regexp start end "\\(\\s-*\\)\\(--\\)"))))))
+
+(defun sgm:pretify-hoogle-invisibility (input-string)
+  (sgm:on-hoogle-command
+   (let ((string-to-hide "https://hackage.haskell.org/package/"))
+     (save-excursion
+       (goto-char comint-last-output-start)
+       (move-beginning-of-line nil)
+       (while (search-forward string-to-hide nil t)
+         (put-text-property (- (point) (length string-to-hide)) (point) 'invisible t))))))
+
 (defun sgm:initialize-for-comint-mode ()
   (sgm:require-buffer)
   (when (derived-mode-p 'comint-mode)
@@ -164,7 +191,9 @@ identified by the following rules:
     (setq-local comint-use-prompt-regexp t)
     (setq-local comint-prompt-read-only t)
     (setq-local comint-buffer-maximum-size 4096)
-    (setq-local comint-output-filter-functions '(sgm:minibuffer-compilation-status))))
+    (setq-local comint-output-filter-functions '(sgm:minibuffer-compilation-status
+                                                 sgm:pretify-hoogle-align
+                                                 sgm:pretify-hoogle-invisibility))))
 
 (defface sgm:face-unimportant
   '((t :foreground "gray58")) "highlight less important text")
@@ -359,6 +388,7 @@ Search for _l_ load _t_ type _i_ info _d_ doc _h_ hoogle _s_ repl _D_ DataKinds 
     (insert (format "Running %s %s, in %s\n" command (mapconcat 'identity command-params " ") dir-name))))
 
 (defun sgm:repl-command (command)
+  (comint-add-to-input-history command)
   (comint-send-string (current-buffer) (concat command "\n")))
 
 (provide 'simple-ghci-mode)
