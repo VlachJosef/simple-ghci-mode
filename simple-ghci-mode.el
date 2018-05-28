@@ -169,6 +169,9 @@ identified by the following rules:
 (defface sgm:face-unimportant
   '((t :foreground "gray58")) "highlight less important text")
 
+(defface sgm:face-unimportant-info
+  '((t :foreground "wheat3")) "highlight less important text when running :info")
+
 (defface sgm:face-thin-arrow
   '((t :foreground "dark salmon")) "highlight ->")
 
@@ -186,6 +189,7 @@ identified by the following rules:
      ("^\\(.*.hs\\):\\([[:digit:]]+\\):\\([[:digit:]]+\\): warning:" 1 2 3 1 1)))
   (setq-local compilation-mode-font-lock-keywords
               '(("-- Defined in ‘.*’" 0 'sgm:face-unimportant prepend)
+                ("-- Defined at .*:[[:digit:]]+:[[:digit:]]+$" 0 'sgm:face-unimportant-info prepend)
                 ("(bound at /.*:[[:digit:]]+:[[:digit:]]+)$" 0 'sgm:face-unimportant prepend)
                 ("\\[ *[[:digit:]]+ of [[:digit:]]+] Compiling" 0 'sgm:face-unimportant prepend)
                 ("( /.*, interpreted )$" 0 'sgm:face-unimportant prepend)
