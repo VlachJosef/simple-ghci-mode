@@ -41,6 +41,9 @@
 (defvar-local sgm:extra-program-params nil
   "List of extras") ;; dir-local
 
+(defvar-local sgm:loaded-modules nil
+  "List of modules")
+
 (defvar sgm:buffer-project-root nil)
 
 ;; Make `sgm:program-name' and `sgm:on-reload-command' safe if their values is a string
@@ -182,6 +185,22 @@ identified by the following rules:
        (while (search-forward string-to-hide nil t)
          (put-text-property (- (point) (length string-to-hide)) (point) 'invisible t))))))
 
+(defun sgm:process-modules (input-string)
+  (if (ring-empty-p comint-input-ring)
+      input-string
+    (let ((head (ring-ref comint-input-ring 0)))
+      (if (string-match ":show modules" head)
+          (let ((start 0))
+            (while (string-match "\\([[:word:].]*\\)[[:space:]]*(" input-string start)
+              (push (match-string-no-properties 1 input-string) sgm:loaded-modules)
+              (setq start (match-end 0)))  ;; we want to continue from end of whole match
+            (when (string-match sgm:prompt-regexp input-string) ;; end of output
+              (sgm:run-repl-command
+               (concat ":module + *" (mapconcat 'identity sgm:loaded-modules " *")))
+              (setq sgm:loaded-modules nil))
+            "") ;; don't print anything
+        input-string))))
+
 (defun sgm:initialize-for-comint-mode ()
   (sgm:require-buffer)
   (when (derived-mode-p 'comint-mode)
@@ -191,6 +210,7 @@ identified by the following rules:
     (setq-local comint-use-prompt-regexp t)
     (setq-local comint-prompt-read-only t)
     (setq-local comint-buffer-maximum-size 4096)
+    (setq-local comint-preoutput-filter-functions '(sgm:process-modules))
     (setq-local comint-output-filter-functions '(sgm:minibuffer-compilation-status
                                                  sgm:pretify-hoogle-align
                                                  sgm:pretify-hoogle-invisibility))))
@@ -303,7 +323,7 @@ to run in `after-save-hook'."
 
 (defhydra sgm:hydra ()
   "
-Search for _a_ repeat _l_ load _t_ type _i_ info _d_ doc _h_ hoogle _s_ repl _D_ DataKinds _n_ no-type-defaults _C_ clean _c_ compile _p_ pedantic _q_ quit"
+Search for _a_ repeat _l_ load _t_ type _i_ info _d_ doc _h_ hoogle _s_ repl _D_ DataKinds _n_ no-type-defaults _C_ clean _c_ compile _p_ pedantic _m_ modules _q_ quit"
   ("a" (sgm:repeat-last) nil)
   ("l" (sgm:load-current-file) nil)
   ("s" (sgm:switch-to-ghci-buffer) nil)
@@ -316,7 +336,11 @@ Search for _a_ repeat _l_ load _t_ type _i_ info _d_ doc _h_ hoogle _s_ repl _D_
   ("p" (sgm:stack-compile-pedantic) nil)
   ("t" (sgm:type-for-thing-at-point) nil)
   ("i" (sgm:info-for-thing-at-point) nil)
+  ("m" (sgm:load-modules) nil)
   ("q" nil nil :color blue))
+
+(defun sgm:load-modules ()
+  (sgm:run-repl-command ":show modules"))
 
 (defun sgm:type-for-thing-at-point ()
   (sgm:run-repl-command (format ":type %s" (thing-at-point 'symbol))))
