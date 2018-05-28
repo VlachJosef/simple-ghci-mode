@@ -303,7 +303,8 @@ to run in `after-save-hook'."
 
 (defhydra sgm:hydra ()
   "
-Search for _l_ load _t_ type _i_ info _d_ doc _h_ hoogle _s_ repl _D_ DataKinds _n_ no-type-defaults _C_ clean _c_ compile _p_ pedantic _q_ quit"
+Search for _a_ repeat _l_ load _t_ type _i_ info _d_ doc _h_ hoogle _s_ repl _D_ DataKinds _n_ no-type-defaults _C_ clean _c_ compile _p_ pedantic _q_ quit"
+  ("a" (sgm:repeat-last) nil)
   ("l" (sgm:load-current-file) nil)
   ("s" (sgm:switch-to-ghci-buffer) nil)
   ("d" (sgm:show-doc "doc") nil)
@@ -333,6 +334,12 @@ Search for _l_ load _t_ type _i_ info _d_ doc _h_ hoogle _s_ repl _D_ DataKinds 
   (sgm:switch-to-ghci-buffer)
   (message "Running %s" repl-cmd)
   (sgm:repl-command repl-cmd))
+
+(defun sgm:repeat-last ()
+  (sgm:switch-to-ghci-buffer)
+  (unless (ring-empty-p comint-input-ring)
+    (let ((head (ring-ref comint-input-ring 0)))
+      (sgm:repl-command head))))
 
 (defun sgm:load-current-file ()
   (let ((file-to-load buffer-file-name))
