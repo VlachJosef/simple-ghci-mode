@@ -44,6 +44,9 @@
 (defvar-local sgm:loaded-modules nil
   "List of modules")
 
+(defvar-local sgm:unprocessed-modules-chunk nil
+  "Internal usage - holds unprocessed chunk of ':show modules' command")
+
 (defvar sgm:buffer-project-root nil)
 
 ;; Make `sgm:program-name' and `sgm:on-reload-command' safe if their values is a string
@@ -190,14 +193,17 @@ identified by the following rules:
       input-string
     (let ((head (ring-ref comint-input-ring 0)))
       (if (string-match ":show modules" head)
-          (let ((start 0))
-            (while (string-match "\\([[:word:].]*\\)[[:space:]]*(" input-string start)
-              (push (match-string-no-properties 1 input-string) sgm:loaded-modules)
+          (let ((input-string-unprocessed (concat sgm:unprocessed-modules-chunk input-string))
+                (start 0))
+            (while (string-match "\\([[:word:].]*\\)[[:space:]]*(" input-string-unprocessed start)
+              (push (match-string-no-properties 1 input-string-unprocessed) sgm:loaded-modules)
               (setq start (match-end 0)))  ;; we want to continue from end of whole match
-            (when (string-match sgm:prompt-regexp input-string) ;; end of output
+            (setq sgm:unprocessed-modules-chunk (substring input-string-unprocessed (match-end 0)))
+            (when (string-match sgm:prompt-regexp input-string-unprocessed) ;; end of output
               (sgm:run-repl-command
                (concat ":module + *" (mapconcat 'identity sgm:loaded-modules " *")))
-              (setq sgm:loaded-modules nil))
+              (setq sgm:loaded-modules nil
+                    sgm:unprocessed-modules-chunk nil))
             "") ;; don't print anything
         input-string))))
 
