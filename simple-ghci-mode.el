@@ -132,6 +132,7 @@ identified by the following rules:
                                              comint-mode-map))
     (define-key map (kbd "C-a") 'comint-bol)
     (define-key map (kbd "C-c v") 'sgm:run-hydra)
+    (define-key map (kbd "C-c C-v") 'comint-clear-buffer)
     map)
   "Basic mode map for `sgm-start'")
 
@@ -212,6 +213,7 @@ identified by the following rules:
   (when (derived-mode-p 'comint-mode)
     (setq comint-process-echoes nil)
     (setq comint-scroll-to-bottom-on-output t)
+    (setq compilation-skip-threshold 0)
     (setq-local comint-prompt-regexp sgm:prompt-regexp)
     (setq-local comint-use-prompt-regexp t)
     (setq-local comint-prompt-read-only t)
@@ -241,7 +243,8 @@ identified by the following rules:
    compilation-error-regexp-alist
    '(("^\\(.*.hs\\):\\([[:digit:]]+\\):\\([[:digit:]]+\\): error:" 1 2 3 2 1)
      ("^  \\(.*.hs\\):\\([[:digit:]]+\\): " 1 2 3 2 1) ;; Hspec failures
-     ("^\\(.*.hs\\):\\([[:digit:]]+\\):\\([[:digit:]]+\\): warning:" 1 2 3 1 1)))
+     ("^\\(.*.hs\\):\\([[:digit:]]+\\):\\([[:digit:]]+\\): warning:" 1 2 3 1 1)
+     ("-- Defined at \\(.*\\):\\([[:digit:]]+\\):\\([[:digit:]]+\\)$" 1 2 3 0 1)))
   (setq-local compilation-mode-font-lock-keywords
               '(("-- Defined in ‘.*’" 0 'sgm:face-unimportant prepend)
                 ("-- Defined at .*:[[:digit:]]+:[[:digit:]]+$" 0 'sgm:face-unimportant-info prepend)
