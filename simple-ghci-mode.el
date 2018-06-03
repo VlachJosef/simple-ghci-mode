@@ -223,6 +223,9 @@ identified by the following rules:
    (let ((input-string-processed (concat sgm:preoutput-filter-processed-info input-string)))
      (pcase sgm:preoutput-filter-print-definition-only
        ('nil input-string)
+       ('back-reference
+        (setq sgm:preoutput-filter-processed-info nil)
+        input-string-processed)
        ((and
          'accumulate
          (guard (string-match sgm:prompt-regexp input-string)))
@@ -281,10 +284,10 @@ identified by the following rules:
    '(("^\\(.*.hs\\):\\([[:digit:]]+\\):\\([[:digit:]]+\\): error:" 1 2 3 2 1)
      ("^  \\(.*.hs\\):\\([[:digit:]]+\\): " 1 2 3 2 1) ;; Hspec failures
      ("^\\(.*.hs\\):\\([[:digit:]]+\\):\\([[:digit:]]+\\): warning:" 1 2 3 1 1)
-     ("-- Defined at \\(.*\\):\\([[:digit:]]+\\):\\([[:digit:]]+\\)$" 1 2 3 0 1)))
+     ("-- \\(Defined at\\|Searched from\\) \\(.*\\):\\([[:digit:]]+\\):\\([[:digit:]]+\\)$" 2 3 4 0 2)))
   (setq-local compilation-mode-font-lock-keywords
               '(("-- Defined in ‘.*’" 0 'sgm:face-unimportant prepend)
-                ("-- Defined at .*:[[:digit:]]+:[[:digit:]]+$" 0 'sgm:face-unimportant-info prepend)
+                ("-- \\(Defined at\\|Searched from\\) .*:[[:digit:]]+:[[:digit:]]+$" 0 'sgm:face-unimportant-info prepend)
                 ("(bound at /.*:[[:digit:]]+:[[:digit:]]+)$" 0 'sgm:face-unimportant prepend)
                 ("\\[ *[[:digit:]]+ of [[:digit:]]+] Compiling" 0 'sgm:face-unimportant prepend)
                 ("( /.*, interpreted )$" 0 'sgm:face-unimportant prepend)
@@ -386,8 +389,8 @@ Search for _a_ repeat _l_ load _t_ type _i_ info _I_ info full _d_ doc _h_ hoogl
   ("c" (sgm:stack-compile) nil)
   ("p" (sgm:stack-compile-pedantic) nil)
   ("t" (sgm:type-for-thing-at-point) nil)
-  ("i" (sgm:definition-for-thing-at-point) nil)
-  ("I" (sgm:info-for-thing-at-point) nil)
+  ("i" (sgm:definition-for-thing-at-point 'accumulate) nil)
+  ("I" (sgm:definition-for-thing-at-point 'back-reference) nil)
   ("m" (sgm:load-modules) nil)
   ("q" nil nil :color blue))
 
@@ -397,15 +400,18 @@ Search for _a_ repeat _l_ load _t_ type _i_ info _I_ info full _d_ doc _h_ hoogl
 (defun sgm:type-for-thing-at-point ()
   (sgm:run-repl-command (format ":type %s" (sgm:symbol-or-selection-at-point))))
 
-(defun sgm:info-for-thing-at-point ()
-  (sgm:run-repl-command (format ":info %s" (sgm:symbol-or-selection-at-point))
-                        (lambda () (sgm:definition-filter-reset))))
-
-(defun sgm:definition-for-thing-at-point ()
-  (sgm:run-repl-command (format ":info %s" (sgm:symbol-or-selection-at-point))
-                        (lambda ()
-                          (sgm:definition-filter-reset)
-                          (setq sgm:preoutput-filter-print-definition-only 'accumulate))))
+(defun sgm:definition-for-thing-at-point (flag)
+  (let ((file-name (buffer-file-name))
+        (buffer-name (buffer-name))
+        (column (current-column))
+        (line (line-number-at-pos)))
+    (sgm:run-repl-command (format ":info %s" (sgm:symbol-or-selection-at-point))
+                          (lambda ()
+                            (setq sgm:preoutput-filter-processed-info
+                                  (if file-name
+                                      (format "-- Searched from %s:%s:%s\n " (abbreviate-file-name file-name) line column)
+                                    (format "-- Searched from %s\n " buffer-name)))
+                            (setq sgm:preoutput-filter-print-definition-only flag)))))
 
 (defun sgm:activate-extension (ext)
   (sgm:run-repl-command (format ":set -X%s" ext)))
