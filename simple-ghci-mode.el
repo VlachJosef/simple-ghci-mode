@@ -47,6 +47,12 @@
 (defvar-local sgm:unprocessed-modules-chunk nil
   "Internal usage - holds unprocessed chunk of ':show modules' command")
 
+(defvar-local sgm:preoutput-filter-print-definition-only nil
+  "Internal usage - determines if ':info' commands prints definition only")
+
+(defvar-local sgm:preoutput-filter-processed-info nil
+  "Internal usage - holds accumulated output of ':info' command")
+
 (defvar sgm:buffer-project-root nil)
 
 ;; Make `sgm:program-name' and `sgm:on-reload-command' safe if their values is a string
@@ -189,24 +195,54 @@ identified by the following rules:
        (while (search-forward string-to-hide nil t)
          (put-text-property (- (point) (length string-to-hide)) (point) 'invisible t))))))
 
+(defmacro sgm:filter-on-command (input-string command body)
+  `(if (and (not (ring-empty-p comint-input-ring))
+            (string-match ,command (ring-ref comint-input-ring 0)))
+       ,body
+     ,input-string))
+
 (defun sgm:process-modules (input-string)
-  (if (ring-empty-p comint-input-ring)
-      input-string
-    (let ((head (ring-ref comint-input-ring 0)))
-      (if (string-match ":show modules" head)
-          (let ((input-string-unprocessed (concat sgm:unprocessed-modules-chunk input-string))
-                (start 0))
-            (while (string-match "\\([[:word:].]*\\)[[:space:]]*(" input-string-unprocessed start)
-              (push (match-string-no-properties 1 input-string-unprocessed) sgm:loaded-modules)
-              (setq start (match-end 0)))  ;; we want to continue from end of whole match
-            (setq sgm:unprocessed-modules-chunk (substring input-string-unprocessed (match-end 0)))
-            (when (string-match sgm:prompt-regexp input-string-unprocessed) ;; end of output
-              (sgm:run-repl-command
-               (concat ":module + *" (mapconcat 'identity sgm:loaded-modules " *")))
-              (setq sgm:loaded-modules nil
-                    sgm:unprocessed-modules-chunk nil))
-            "") ;; don't print anything
-        input-string))))
+  (sgm:filter-on-command
+   input-string ":show modules"
+   (let ((input-string-unprocessed (concat sgm:unprocessed-modules-chunk input-string))
+         (start 0))
+     (while (string-match "\\([[:word:].]*\\)[[:space:]]*(" input-string-unprocessed start)
+       (push (match-string-no-properties 1 input-string-unprocessed) sgm:loaded-modules)
+       (setq start (match-end 0)))  ;; we want to continue from end of whole match
+     (setq sgm:unprocessed-modules-chunk (substring input-string-unprocessed (match-end 0)))
+     (when (string-match sgm:prompt-regexp input-string-unprocessed) ;; end of output
+       (sgm:run-repl-command
+        (concat ":module + *" (mapconcat 'identity sgm:loaded-modules " *")))
+       (setq sgm:loaded-modules nil
+             sgm:unprocessed-modules-chunk nil))
+     ""))) ;; don't print anything
+
+(defun sgm:definition-only-or-full-info (input-string)
+  (sgm:filter-on-command
+   input-string ":info"
+   (let ((input-string-processed (concat sgm:preoutput-filter-processed-info input-string)))
+     (pcase sgm:preoutput-filter-print-definition-only
+       ('nil input-string)
+       ((and
+         'accumulate
+         (guard (string-match sgm:prompt-regexp input-string)))
+        (sgm:definition-filter-reset)
+        input-string-processed) ;; There has been no instance section
+       ((guard (string-match sgm:prompt-regexp input-string))
+        (sgm:definition-filter-reset)
+        (match-string 0 input-string))
+       ('skip-rest "")
+       ((guard (string-match "^instance " input-string-processed 0))
+        (setq sgm:preoutput-filter-print-definition-only 'skip-rest)
+        (substring input-string-processed 0 (match-beginning 0)))
+       ('accumulate
+        (setq sgm:preoutput-filter-processed-info input-string-processed)
+        "")
+       (_ input-string)))))
+
+(defun sgm:definition-filter-reset ()
+  (setq sgm:preoutput-filter-print-definition-only nil
+        sgm:preoutput-filter-processed-info nil))
 
 (defun sgm:initialize-for-comint-mode ()
   (sgm:require-buffer)
@@ -218,7 +254,8 @@ identified by the following rules:
     (setq-local comint-use-prompt-regexp t)
     (setq-local comint-prompt-read-only t)
     (setq-local comint-buffer-maximum-size 4096)
-    (setq-local comint-preoutput-filter-functions '(sgm:process-modules))
+    (setq-local comint-preoutput-filter-functions '(sgm:process-modules
+                                                    sgm:definition-only-or-full-info))
     (setq-local comint-output-filter-functions '(sgm:minibuffer-compilation-status
                                                  sgm:pretify-hoogle-align
                                                  sgm:pretify-hoogle-invisibility))))
@@ -330,9 +367,14 @@ to run in `after-save-hook'."
            collect buffer into sgm-mode-buffers
            finally return sgm-mode-buffers))
 
+(defun sgm:symbol-or-selection-at-point ()
+  (if (use-region-p)
+     (buffer-substring (region-beginning) (region-end))
+    (thing-at-point 'symbol)))
+
 (defhydra sgm:hydra ()
   "
-Search for _a_ repeat _l_ load _t_ type _i_ info _d_ doc _h_ hoogle _s_ repl _D_ DataKinds _n_ no-type-defaults _C_ clean _c_ compile _p_ pedantic _m_ modules _q_ quit"
+Search for _a_ repeat _l_ load _t_ type _i_ info _I_ info full _d_ doc _h_ hoogle _s_ repl _D_ DataKinds _n_ no-type-defaults _C_ clean _c_ compile _p_ pedantic _m_ modules _q_ quit"
   ("a" (sgm:repeat-last) nil)
   ("l" (sgm:load-current-file) nil)
   ("s" (sgm:switch-to-ghci-buffer) nil)
@@ -344,7 +386,8 @@ Search for _a_ repeat _l_ load _t_ type _i_ info _d_ doc _h_ hoogle _s_ repl _D_
   ("c" (sgm:stack-compile) nil)
   ("p" (sgm:stack-compile-pedantic) nil)
   ("t" (sgm:type-for-thing-at-point) nil)
-  ("i" (sgm:info-for-thing-at-point) nil)
+  ("i" (sgm:definition-for-thing-at-point) nil)
+  ("I" (sgm:info-for-thing-at-point) nil)
   ("m" (sgm:load-modules) nil)
   ("q" nil nil :color blue))
 
@@ -352,10 +395,17 @@ Search for _a_ repeat _l_ load _t_ type _i_ info _d_ doc _h_ hoogle _s_ repl _D_
   (sgm:run-repl-command ":show modules"))
 
 (defun sgm:type-for-thing-at-point ()
-  (sgm:run-repl-command (format ":type %s" (thing-at-point 'symbol))))
+  (sgm:run-repl-command (format ":type %s" (sgm:symbol-or-selection-at-point))))
 
 (defun sgm:info-for-thing-at-point ()
-  (sgm:run-repl-command (format ":info %s" (thing-at-point 'symbol))))
+  (sgm:run-repl-command (format ":info %s" (sgm:symbol-or-selection-at-point))
+                        (lambda () (sgm:definition-filter-reset))))
+
+(defun sgm:definition-for-thing-at-point ()
+  (sgm:run-repl-command (format ":info %s" (sgm:symbol-or-selection-at-point))
+                        (lambda ()
+                          (sgm:definition-filter-reset)
+                          (setq sgm:preoutput-filter-print-definition-only 'accumulate))))
 
 (defun sgm:activate-extension (ext)
   (sgm:run-repl-command (format ":set -X%s" ext)))
@@ -363,8 +413,9 @@ Search for _a_ repeat _l_ load _t_ type _i_ info _d_ doc _h_ hoogle _s_ repl _D_
 (defun sgm:activate-warning (ext)
   (sgm:run-repl-command (format ":set -W%s" ext)))
 
-(defun sgm:run-repl-command (repl-cmd)
+(defun sgm:run-repl-command (repl-cmd &optional pre-action)
   (sgm:switch-to-ghci-buffer)
+  (when (functionp pre-action) (funcall pre-action))
   (message "Running %s" repl-cmd)
   (sgm:repl-command repl-cmd))
 
