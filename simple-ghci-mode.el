@@ -229,8 +229,11 @@ identified by the following rules:
        ((and
          'accumulate
          (guard (string-match sgm:prompt-regexp input-string)))
-        (sgm:definition-filter-reset)
-        input-string-processed) ;; There has been no instance section
+        (let ((prompt (match-string 0 input-string)))
+          (sgm:definition-filter-reset)
+          (if (string-match "^instance " input-string-processed 0) ;; prompt and instance listing may be in same chunk
+              (concat (substring input-string-processed 0 (match-beginning 0)) prompt)
+            input-string-processed)))  ;; There has been no instance listing
        ((guard (string-match sgm:prompt-regexp input-string))
         (sgm:definition-filter-reset)
         (match-string 0 input-string))
