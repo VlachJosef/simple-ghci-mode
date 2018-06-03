@@ -297,8 +297,7 @@ identified by the following rules:
                 ("( .*o )$" 0 'sgm:face-unimportant prepend)
                 ("Running \\(.*\\)$" 0 'sgm:face-run-command prepend)
                 (" -> " 0 'sgm:face-thin-arrow prepend)
-                (" :: " 0 'sgm:face-thick-arrow prepend)
-                (" => " 0 'sgm:face-thick-arrow prepend)))
+                ("\\( ::\\| =>\\)" 0 'sgm:face-thick-arrow prepend)))
   (compilation-setup t))
 
 (defun sgm:check-modified-buffers ()
