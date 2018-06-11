@@ -8,3 +8,7 @@
 ### Standard output of `:hoogle` command
 
 ![Standard output of :hoogle command](images/hoogle-standard.png)
+
+### Example
+
+![Example](images/ghci-example.png)
