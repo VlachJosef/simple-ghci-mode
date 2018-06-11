@@ -217,6 +217,8 @@ identified by the following rules:
              sgm:unprocessed-modules-chunk nil))
      ""))) ;; don't print anything
 
+(defconst sgm:section-to-skip "\\(^instance \\|^type instance \\)")
+
 (defun sgm:definition-only-or-full-info (input-string)
   (sgm:filter-on-command
    input-string ":info"
@@ -231,14 +233,14 @@ identified by the following rules:
          (guard (string-match sgm:prompt-regexp input-string)))
         (let ((prompt (match-string 0 input-string)))
           (sgm:definition-filter-reset)
-          (if (string-match "^instance " input-string-processed 0) ;; prompt and instance listing may be in same chunk
+          (if (string-match sgm:section-to-skip input-string-processed 0) ;; prompt and instance listing may be in same chunk
               (concat (substring input-string-processed 0 (match-beginning 0)) prompt)
             input-string-processed)))  ;; There has been no instance listing
        ((guard (string-match sgm:prompt-regexp input-string))
         (sgm:definition-filter-reset)
         (match-string 0 input-string))
        ('skip-rest "")
-       ((guard (string-match "^instance " input-string-processed 0))
+       ((guard (string-match sgm:section-to-skip input-string-processed 0))
         (setq sgm:preoutput-filter-print-definition-only 'skip-rest)
         (substring input-string-processed 0 (match-beginning 0)))
        ('accumulate
@@ -403,6 +405,7 @@ Search for _a_ repeat _l_ load _t_ type _i_ info _I_ info full _d_ doc _h_ hoogl
   (sgm:run-repl-command (format ":type %s" (sgm:symbol-or-selection-at-point))))
 
 (defun sgm:definition-for-thing-at-point (flag)
+  (xref-push-marker-stack)
   (let ((file-name (buffer-file-name))
         (buffer-name (buffer-name))
         (column (current-column))
