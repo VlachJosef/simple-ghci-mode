@@ -209,12 +209,14 @@ identified by the following rules:
      (while (string-match "\\([[:word:].]*\\)[[:space:]]*(" input-string-unprocessed start)
        (push (match-string-no-properties 1 input-string-unprocessed) sgm:loaded-modules)
        (setq start (match-end 0)))  ;; we want to continue from end of whole match
-     (setq sgm:unprocessed-modules-chunk (substring input-string-unprocessed (match-end 0)))
-     (when (string-match sgm:prompt-regexp input-string-unprocessed) ;; end of output
-       (sgm:run-repl-command
-        (concat ":module + *" (mapconcat 'identity sgm:loaded-modules " *")))
-       (setq sgm:loaded-modules nil
-             sgm:unprocessed-modules-chunk nil))
+     (if (not sgm:loaded-modules)
+         (message "No modules loaded.")
+       (setq sgm:unprocessed-modules-chunk (substring input-string-unprocessed (match-end 0)))
+       (when (string-match sgm:prompt-regexp input-string-unprocessed) ;; end of output
+         (sgm:run-repl-command
+          (concat ":module + *" (mapconcat 'identity sgm:loaded-modules " *")))
+         (setq sgm:loaded-modules nil
+               sgm:unprocessed-modules-chunk nil)))
      ""))) ;; don't print anything
 
 (defconst sgm:section-to-skip "\\(^instance \\|^type instance \\)")
