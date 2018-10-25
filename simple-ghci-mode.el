@@ -383,7 +383,7 @@ to run in `after-save-hook'."
 
 (defhydra sgm:hydra ()
   "
-Search for _a_ repeat _l_ load _t_ type _i_ info _I_ info full _d_ doc _h_ hoogle _s_ repl _D_ DataKinds _n_ no-type-defaults _C_ clean _c_ compile _p_ pedantic _m_ modules _q_ quit"
+Search for _a_ repeat _l_ load _t_ type _i_ info _I_ info full _k_ kind _d_ doc _h_ hoogle _s_ repl _D_ DataKinds _n_ no-type-defaults _C_ clean _c_ compile _p_ pedantic _m_ modules _q_ quit"
   ("a" (sgm:repeat-last) nil)
   ("l" (sgm:load-current-file) nil)
   ("s" (sgm:switch-to-ghci-buffer) nil)
@@ -397,6 +397,7 @@ Search for _a_ repeat _l_ load _t_ type _i_ info _I_ info full _d_ doc _h_ hoogl
   ("t" (sgm:type-for-thing-at-point) nil)
   ("i" (sgm:definition-for-thing-at-point 'accumulate) nil)
   ("I" (sgm:definition-for-thing-at-point 'back-reference) nil)
+  ("k" (sgm:kind-for-thing-at-point) nil)
   ("m" (sgm:load-modules) nil)
   ("q" nil nil :color blue))
 
@@ -405,6 +406,9 @@ Search for _a_ repeat _l_ load _t_ type _i_ info _I_ info full _d_ doc _h_ hoogl
 
 (defun sgm:type-for-thing-at-point ()
   (sgm:run-repl-command (format ":type %s" (sgm:symbol-or-selection-at-point))))
+
+(defun sgm:kind-for-thing-at-point ()
+    (sgm:run-repl-command (format ":kind %s" (sgm:symbol-or-selection-at-point))))
 
 (defun sgm:definition-for-thing-at-point (flag)
   (xref-push-marker-stack)
