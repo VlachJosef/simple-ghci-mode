@@ -206,7 +206,7 @@ identified by the following rules:
    input-string ":show modules"
    (let ((input-string-unprocessed (concat sgm:unprocessed-modules-chunk input-string))
          (start 0))
-     (while (string-match "\\([[:word:].]*\\)[[:space:]]*(" input-string-unprocessed start)
+     (while (string-match "\\([[:word:]._]*\\)[[:space:]]*(" input-string-unprocessed start)
        (push (match-string-no-properties 1 input-string-unprocessed) sgm:loaded-modules)
        (setq start (match-end 0)))  ;; we want to continue from end of whole match
      (if (not sgm:loaded-modules)
