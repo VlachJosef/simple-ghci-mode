@@ -496,7 +496,9 @@ Search for _a_ repeat _l_ load _t_ type _i_ info _I_ info full _k_ kind _d_ doc 
     (insert (format "Running %s %s, in %s\n" command (mapconcat 'identity command-params " ") dir-name))))
 
 (defun sgm:repl-command (command)
-  (comint-add-to-input-history command)
+  (unless (or (ring-empty-p comint-input-ring)
+              (equal command (car (ring-elements comint-input-ring))))
+    (comint-add-to-input-history command))
   (comint-send-string (current-buffer) (concat command "\n")))
 
 (provide 'simple-ghci-mode)
